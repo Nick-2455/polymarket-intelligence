@@ -73,16 +73,17 @@ async def run_scan():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: scheduler runs inside uvicorn's event loop
+    # Delay first scan by 10s so uvicorn is fully up before hitting Claude API
+    from datetime import timedelta
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         run_scan,
         "interval",
         seconds=SCAN_INTERVAL,
-        next_run_time=datetime.now(timezone.utc),
+        next_run_time=datetime.now(timezone.utc) + timedelta(seconds=10),
     )
     scheduler.start()
-    print(f"  Scheduler started — scan every {SCAN_INTERVAL}s")
+    print(f"  Scheduler started — first scan in 10s, then every {SCAN_INTERVAL}s")
     yield
     # Shutdown
     scheduler.shutdown(wait=False)
