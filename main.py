@@ -109,7 +109,7 @@ def main():
     print(f"  API key:         ...{api_key[-8:]}")
     print("=" * 50)
 
-    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
 
 
 if __name__ == "__main__":
