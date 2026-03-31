@@ -1,0 +1,14 @@
+.env
+signals_log.jsonl
+backtest_cache.json
+backtest_report.json
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+*.log
+.DS_Store
