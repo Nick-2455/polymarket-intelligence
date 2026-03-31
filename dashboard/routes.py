@@ -270,6 +270,7 @@ _NAVBAR = """
     <a class="nav-tab {signals_active}" href="/">Signals</a>
     <a class="nav-tab {paper_active}" href="/paper">Paper Trading</a>
     <a class="nav-tab {backtest_active}" href="/backtest">Backtest</a>
+    <a class="nav-tab {guide_active}" href="/guide">Guide</a>
   </div>
   <div class="navbar-right" id="clock"></div>
 </nav>
@@ -292,6 +293,7 @@ def _navbar(active: str) -> str:
         .replace("{signals_active}", "active" if active == "signals" else "")
         .replace("{paper_active}", "active" if active == "paper" else "")
         .replace("{backtest_active}", "active" if active == "backtest" else "")
+        .replace("{guide_active}", "active" if active == "guide" else "")
     )
 
 
@@ -809,6 +811,246 @@ loadReport();
 """
 
 
+# ── User Guide page ───────────────────────────────────────────────────────
+
+GUIDE_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guide — Polymarket Intelligence</title>
+""" + _BASE_STYLE + """
+<style>
+.guide { max-width: 760px; margin: 0 auto; padding: 32px 24px 64px; }
+.guide h2 { font-size: 18px; font-weight: 700; color: var(--text); margin: 36px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.guide h3 { font-size: 14px; font-weight: 600; color: var(--accent); margin: 20px 0 8px; }
+.guide p  { color: var(--muted); line-height: 1.75; margin-bottom: 12px; font-size: 14px; }
+.guide ul, .guide ol { color: var(--muted); padding-left: 20px; margin-bottom: 12px; }
+.guide li { line-height: 1.8; font-size: 14px; }
+.guide strong { color: var(--text); font-weight: 600; }
+.guide code {
+  background: var(--surface2); color: var(--accent);
+  padding: 2px 7px; border-radius: 4px; font-size: 12px;
+  font-family: 'SF Mono','Fira Code',monospace;
+}
+.guide a { color: var(--accent); text-decoration: none; }
+.guide a:hover { text-decoration: underline; }
+.guide .hero {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 32px;
+  margin-bottom: 8px;
+}
+.guide .hero-title { font-size: 26px; font-weight: 800; color: var(--text); margin-bottom: 8px; }
+.guide .hero-sub { color: var(--muted); font-size: 14px; line-height: 1.7; }
+.flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 16px 0 24px;
+}
+.flow-step {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+}
+.flow-step .num {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 10px;
+}
+.flow-step .label { font-size: 12px; font-weight: 600; color: var(--text); }
+.flow-step .desc  { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.signal-table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; }
+.signal-table th { text-align: left; padding: 8px 14px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 1px solid var(--border); }
+.signal-table td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid rgba(42,45,62,0.5); vertical-align: top; }
+.signal-table tr:last-child td { border-bottom: none; }
+.archetype-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 12px 0 20px; }
+.archetype-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.archetype-card .name { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+.archetype-card .desc { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.tip {
+  background: rgba(108,99,255,0.08);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.tip strong { color: var(--text); }
+@media (max-width: 640px) {
+  .guide { padding: 20px 16px 48px; }
+  .guide .hero { padding: 20px; }
+  .guide .hero-title { font-size: 20px; }
+}
+</style>
+</head>
+<body>
+""" + _navbar("guide") + """
+<div class="guide">
+
+  <div class="hero">
+    <div class="hero-title">Polymarket Intelligence — User Guide</div>
+    <div class="hero-sub">
+      An AI system that scans Polymarket prediction markets every 60 seconds,
+      simulates how 5 different trader archetypes would react, and generates
+      actionable trading signals. This guide explains everything you need to know.
+    </div>
+  </div>
+
+  <h2>How it works</h2>
+  <p>Every 60 seconds the system runs a full scan cycle:</p>
+  <div class="flow">
+    <div class="flow-step"><div class="num">1</div><div class="label">Fetch</div><div class="desc">Top 5 markets by volume from Polymarket</div></div>
+    <div class="flow-step"><div class="num">2</div><div class="label">Analyze</div><div class="desc">5 Claude AI archetypes give their opinion</div></div>
+    <div class="flow-step"><div class="num">3</div><div class="label">Score</div><div class="desc">Consensus score calculated from all agents</div></div>
+    <div class="flow-step"><div class="num">4</div><div class="label">Signal</div><div class="desc">STRONG BUY / SELL / WATCH / IGNORE</div></div>
+    <div class="flow-step"><div class="num">5</div><div class="label">Trade</div><div class="desc">Paper portfolio bets automatically</div></div>
+  </div>
+
+  <h2>Signal Types</h2>
+  <table class="signal-table">
+    <thead><tr><th>Signal</th><th>Condition</th><th>Meaning</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-buy">Strong Buy</span></td>
+        <td><code>edge &gt; 2%</code> and <code>consensus &gt; +4</code></td>
+        <td>Strong bullish agreement — most agents want YES</td>
+        <td>Paper portfolio bets YES automatically</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-sell">Strong Sell</span></td>
+        <td><code>edge &gt; 2%</code> and <code>consensus &lt; -4</code></td>
+        <td>Strong bearish agreement — most agents want NO</td>
+        <td>Paper portfolio bets NO automatically</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-watch">Watch</span></td>
+        <td><code>edge &gt; 1%</code> and <code>|consensus| &gt; 6</code></td>
+        <td>Interesting market but edge not strong enough yet</td>
+        <td>Monitor — no bet placed</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-ignore">Ignore</span></td>
+        <td>Everything else</td>
+        <td>No clear opportunity</td>
+        <td>Skipped</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>The 5 Trader Archetypes</h2>
+  <p>Each market is analyzed by 5 Claude AI agents simultaneously. Each has a distinct personality and decision logic:</p>
+  <div class="archetype-grid">
+    <div class="archetype-card"><div class="name">RETAIL</div><div class="desc">Emotional, FOMO-driven. Follows headlines and social sentiment. Tends to buy when everyone else is buying.</div></div>
+    <div class="archetype-card"><div class="name">INSTITUTION</div><div class="desc">Analytical and conservative. Fades extreme momentum. Waits for data confirmation before acting.</div></div>
+    <div class="archetype-card"><div class="name">DEGEN</div><div class="desc">High risk tolerance. Hunts asymmetric bets and extreme odds. Rarely skips — loves volatile markets.</div></div>
+    <div class="archetype-card"><div class="name">WHALE</div><div class="desc">Only acts with overwhelming conviction. Aware their size moves the market. SKIPs most opportunities.</div></div>
+    <div class="archetype-card"><div class="name">QUANT</div><div class="desc">Pure statistics. Ignores narrative entirely. Compares implied probability vs historical base rates.</div></div>
+  </div>
+
+  <h2>Reading the Numbers</h2>
+
+  <h3>Edge %</h3>
+  <p>
+    Measures how far the YES price deviates from 50/50 — a proxy for market conviction.
+    <br><code>edge = |yes_price − 0.5| × 200</code>
+    <br>A market at 0.5 (50%) has edge 0%. A market at 0.99 has edge 98%.
+    High edge means the crowd has strong conviction, which creates potential for mispricing.
+  </p>
+
+  <h3>Consensus Score (−10 to +10)</h3>
+  <p>
+    Weighted average of all non-SKIP agents:<br>
+    <code>YES agents contribute +conviction</code> &nbsp;·&nbsp; <code>NO agents contribute −conviction</code>
+  </p>
+  <ul>
+    <li><strong>+8 to +10</strong> — near-unanimous bullish. Very strong signal.</li>
+    <li><strong>+4 to +7</strong> — moderate bullish lean.</li>
+    <li><strong>0</strong> — agents split. No clear direction.</li>
+    <li><strong>−4 to −7</strong> — moderate bearish lean.</li>
+    <li><strong>−8 to −10</strong> — near-unanimous bearish. Very strong signal.</li>
+  </ul>
+
+  <h2>Paper Trading</h2>
+  <p>
+    The paper trading module simulates real bets with <strong>$5,000 fake USDC</strong>.
+    Every STRONG BUY or STRONG SELL automatically opens a position.
+  </p>
+  <ul>
+    <li><strong>Stake per trade:</strong> 2% of current balance (dynamic — grows with wins, shrinks with losses)</li>
+    <li><strong>STRONG BUY</strong> → bets YES at current yes_price</li>
+    <li><strong>STRONG SELL</strong> → bets NO at current no_price</li>
+    <li><strong>No duplicates:</strong> only one open position per market at a time</li>
+    <li><strong>Payout formula:</strong> <code>payout = stake / entry_price</code> if won</li>
+    <li><strong>Bust protection:</strong> if balance drops below $50 with no open positions, resets to $5,000</li>
+  </ul>
+
+  <div class="tip">
+    <strong>Example:</strong> Balance $5,000 → stake = $100. YES price = 0.25.
+    If market resolves YES → payout = $100 / 0.25 = $400 → profit $300 (+300% ROI).
+    If resolves NO → lose $100 (−100%).
+  </div>
+
+  <h2>Backtest</h2>
+  <p>
+    The backtest checks <strong>past signals against real market resolutions</strong> to measure
+    if the system is actually making good predictions.
+  </p>
+  <ul>
+    <li>Click <strong>Run Backtest</strong> on the Backtest page at any time</li>
+    <li>Only STRONG BUY and STRONG SELL signals are evaluated</li>
+    <li>Markets that haven't resolved yet show as <em>open</em> — they're excluded from win rate</li>
+    <li>Results are cached — resolved markets aren't re-queried</li>
+  </ul>
+  <p><strong>How to interpret results:</strong></p>
+  <ul>
+    <li>Win rate <strong>&gt; 55%</strong> with n &gt; 20 signals → system has real predictive value</li>
+    <li>Win rate <strong>&lt; 50%</strong> → signals are noisy, thresholds need tuning</li>
+    <li>If <strong>QUANT</strong> has the highest win rate → its statistical approach is most reliable for this market</li>
+  </ul>
+
+  <h2>Pages at a Glance</h2>
+  <ul>
+    <li><strong><a href="/">Signals</a></strong> — live feed of all signals from recent scans, auto-refreshes every 60s</li>
+    <li><strong><a href="/paper">Paper Trading</a></strong> — portfolio balance, open positions, closed trade history, equity chart</li>
+    <li><strong><a href="/backtest">Backtest</a></strong> — run historical validation on-demand, see win rate by archetype and edge bucket</li>
+    <li><strong><a href="/health">/health</a></strong> — JSON status endpoint, useful to verify the scanner is running</li>
+  </ul>
+
+  <h2>Cost &amp; Rate Limits</h2>
+  <ul>
+    <li>Each scan: 5 markets × 5 agents × ~$0.0008 ≈ <strong>$0.02</strong></li>
+    <li>Running 24/7 at 60s interval: ~1,440 scans/day ≈ <strong>$28/day</strong></li>
+    <li>Model used: <code>claude-haiku-4-5-20251001</code> (fastest &amp; cheapest)</li>
+    <li>Scan interval is configurable via <code>SCAN_INTERVAL_SECONDS</code> env var</li>
+  </ul>
+
+  <div class="tip">
+    <strong>Tip:</strong> Set <code>SCAN_INTERVAL_SECONDS=300</code> in Railway env vars to scan every 5 minutes
+    and reduce costs to ~$5.76/day with minimal loss of signal quality.
+  </div>
+
+</div>
+</body>
+</html>
+"""
+
+
 # ── Route handlers ─────────────────────────────────────────────────────────
 
 @router.get("/", response_class=HTMLResponse)
@@ -872,6 +1114,11 @@ async def get_backtest():
 @router.get("/backtest", response_class=HTMLResponse)
 async def backtest_page():
     return BACKTEST_HTML
+
+
+@router.get("/guide", response_class=HTMLResponse)
+async def guide_page():
+    return GUIDE_HTML
 
 
 @router.get("/paper", response_class=HTMLResponse)
