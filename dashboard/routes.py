@@ -8,6 +8,7 @@ from fastapi import APIRouter
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from storage.logger import SignalLogger
+from paper_trading.portfolio import Portfolio, PORTFOLIO_FILE
 
 BACKTEST_REPORT_FILE = Path("backtest_report.json")
 
@@ -63,7 +64,7 @@ DASHBOARD_HTML = """\
 </head>
 <body>
 <h1>Polymarket Intelligence System</h1>
-<p class="subtitle">AI-powered prediction market analysis with 5 trader archetypes</p>
+<p class="subtitle">AI-powered prediction market analysis with 5 trader archetypes &nbsp;·&nbsp; <a href="/paper" style="color:#58a6ff;text-decoration:none">Paper Trading →</a> &nbsp;·&nbsp; <a href="/backtest" style="color:#58a6ff;text-decoration:none">Backtest →</a></p>
 <table>
   <thead>
     <tr>
@@ -406,3 +407,192 @@ loadReport();
 @router.get("/backtest", response_class=HTMLResponse)
 async def backtest_page():
     return BACKTEST_HTML
+
+
+# ── Paper Trading endpoints ────────────────────────────────────────────────
+
+PAPER_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paper Trading — Polymarket Intelligence</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    background: #0d1117; color: #c9d1d9;
+    padding: 24px; min-height: 100vh;
+  }
+  h1 { color: #58a6ff; margin-bottom: 4px; font-size: 1.6rem; }
+  h2 { color: #8b949e; margin: 28px 0 12px; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .nav { margin-bottom: 24px; font-size: 0.8rem; }
+  .nav a { color: #58a6ff; text-decoration: none; margin-right: 16px; }
+  .subtitle { color: #8b949e; margin-bottom: 24px; font-size: 0.85rem; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 28px; }
+  .kpi { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 14px 16px; }
+  .kpi-label { color: #8b949e; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .kpi-value { font-size: 1.8rem; font-weight: 700; }
+  .green { color: #3fb950; } .red { color: #f85149; } .yellow { color: #d29922; }
+  .blue { color: #58a6ff; } .neutral { color: #c9d1d9; }
+  .chart-wrap { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 20px; margin-bottom: 28px; height: 220px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 32px; }
+  th { text-align: left; padding: 10px 14px; background: #161b22; color: #8b949e; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #21262d; }
+  td { padding: 10px 14px; border-bottom: 1px solid #21262d; font-size: 0.82rem; }
+  tr:hover { background: #161b22; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.68rem; font-weight: 700; }
+  .YES { background: #0d4429; color: #3fb950; border: 1px solid #238636; }
+  .NO  { background: #491c1c; color: #f85149; border: 1px solid #da3633; }
+  .WON { color: #3fb950; font-weight: 600; }
+  .LOST { color: #f85149; font-weight: 600; }
+  .OPEN { color: #d29922; font-weight: 600; }
+  .empty { text-align: center; padding: 32px; color: #8b949e; }
+  .q { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="nav">
+  <a href="/">← Dashboard</a>
+  <a href="/backtest">Backtest</a>
+</div>
+<h1>Paper Trading</h1>
+<p class="subtitle" id="subtitle">Loading portfolio...</p>
+
+<div class="kpi-grid" id="kpis"></div>
+
+<h2>Balance en el tiempo</h2>
+<div class="chart-wrap"><canvas id="balanceChart"></canvas></div>
+
+<h2>Posiciones abiertas</h2>
+<table>
+  <thead><tr><th>Dir</th><th>Pregunta</th><th>Stake</th><th>Entry</th><th>Payout pot.</th><th>Edge%</th><th>Abierta</th></tr></thead>
+  <tbody id="open-body"></tbody>
+</table>
+
+<h2>Historial de trades</h2>
+<table>
+  <thead><tr><th>Resultado</th><th>Dir</th><th>Pregunta</th><th>Stake</th><th>P&L</th><th>ROI</th><th>Cerrado</th></tr></thead>
+  <tbody id="history-body"></tbody>
+</table>
+
+<script>
+function fmt(v, prefix='$') {
+  const s = prefix + Math.abs(v).toFixed(2);
+  return (v >= 0 ? '+' : '-') + s;
+}
+function age(iso) {
+  const mins = Math.floor((Date.now() - new Date(iso)) / 60000);
+  if (mins < 60) return mins + 'm ago';
+  return Math.floor(mins/60) + 'h ago';
+}
+
+let chartInst = null;
+
+async function load() {
+  const resp = await fetch('/api/paper/portfolio');
+  if (!resp.ok) { document.getElementById('subtitle').textContent = 'No portfolio data yet.'; return; }
+  const p = await resp.json();
+  const s = p.stats;
+
+  document.getElementById('subtitle').textContent =
+    `Actualizado: ${new Date().toLocaleTimeString()}  ·  Equity: $${s.total_equity.toFixed(2)}`;
+
+  const retCls = s.total_return_pct >= 0 ? 'green' : 'red';
+  const pnlCls = s.realized_pnl >= 0 ? 'green' : 'red';
+  const wrCls  = s.win_rate >= 55 ? 'green' : s.win_rate <= 45 ? 'red' : 'yellow';
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Balance</div><div class="kpi-value blue">$${s.balance.toFixed(0)}</div></div>
+    <div class="kpi"><div class="kpi-label">Staked</div><div class="kpi-value neutral">$${s.total_staked.toFixed(0)}</div></div>
+    <div class="kpi"><div class="kpi-label">Equity</div><div class="kpi-value blue">$${s.total_equity.toFixed(0)}</div></div>
+    <div class="kpi"><div class="kpi-label">Retorno</div><div class="kpi-value ${retCls}">${s.total_return_pct >= 0 ? '+' : ''}${s.total_return_pct}%</div></div>
+    <div class="kpi"><div class="kpi-label">P&L Real.</div><div class="kpi-value ${pnlCls}">${fmt(s.realized_pnl)}</div></div>
+    <div class="kpi"><div class="kpi-label">Win Rate</div><div class="kpi-value ${wrCls}">${s.win_rate}%</div></div>
+    <div class="kpi"><div class="kpi-label">Trades</div><div class="kpi-value neutral">${s.total_trades}</div></div>
+    <div class="kpi"><div class="kpi-label">Abiertas</div><div class="kpi-value yellow">${s.open_positions}</div></div>
+  `;
+
+  // Balance chart
+  const hist = p.balance_history || [];
+  if (hist.length > 1) {
+    const labels = hist.map(h => new Date(h.timestamp).toLocaleTimeString());
+    const data   = hist.map(h => h.balance);
+    const last   = data[data.length-1];
+    const color  = last >= 5000 ? '#3fb950' : '#f85149';
+    if (chartInst) chartInst.destroy();
+    chartInst = new Chart(document.getElementById('balanceChart'), {
+      type: 'line',
+      data: { labels, datasets: [{ label: 'Equity ($)', data, borderColor: color, backgroundColor: 'transparent', tension: 0.3, pointRadius: 2 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#8b949e', maxTicksLimit: 8 }, grid: { color: '#21262d' } },
+          y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } }
+        }
+      }
+    });
+  }
+
+  // Open positions
+  const openPos = (p.positions || []).filter(x => x.status === 'OPEN');
+  const obody = document.getElementById('open-body');
+  obody.innerHTML = openPos.length ? openPos.map(pos => `
+    <tr>
+      <td><span class="badge ${pos.direction}">${pos.direction}</span></td>
+      <td class="q" title="${pos.question}">${pos.question}</td>
+      <td>$${pos.stake.toFixed(2)}</td>
+      <td>${pos.entry_price.toFixed(3)}</td>
+      <td style="color:#3fb950">$${pos.potential_payout.toFixed(2)}</td>
+      <td style="color:#58a6ff">${pos.edge_at_entry.toFixed(1)}%</td>
+      <td style="color:#8b949e">${age(pos.opened_at)}</td>
+    </tr>`).join('') : '<tr><td colspan="7" class="empty">No hay posiciones abiertas</td></tr>';
+
+  // Trade history
+  const history = [...(p.trade_history || [])].reverse();
+  const hbody = document.getElementById('history-body');
+  hbody.innerHTML = history.length ? history.map(t => `
+    <tr>
+      <td class="${t.result}">${t.result}</td>
+      <td><span class="badge ${t.direction}">${t.direction}</span></td>
+      <td class="q" title="${t.question}">${t.question}</td>
+      <td>$${t.stake.toFixed(2)}</td>
+      <td class="${t.pnl >= 0 ? 'green' : 'red'}">${fmt(t.pnl)}</td>
+      <td class="${t.roi_pct >= 0 ? 'green' : 'red'}">${t.roi_pct >= 0 ? '+' : ''}${t.roi_pct.toFixed(1)}%</td>
+      <td style="color:#8b949e">${new Date(t.closed_at).toLocaleString()}</td>
+    </tr>`).join('') : '<tr><td colspan="7" class="empty">Sin trades cerrados aún</td></tr>';
+}
+
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>
+"""
+
+
+@router.get("/paper", response_class=HTMLResponse)
+async def paper_page():
+    return PAPER_HTML
+
+
+@router.get("/api/paper/portfolio")
+async def get_portfolio():
+    p = Portfolio.load()
+    data = p.model_dump()
+    data["stats"] = p.get_stats()
+    return JSONResponse(content=data)
+
+
+@router.get("/api/paper/positions")
+async def get_positions():
+    p = Portfolio.load()
+    open_pos = [pos.model_dump() for pos in p.positions if pos.status == "OPEN"]
+    return JSONResponse(content=open_pos)
+
+
+@router.get("/api/paper/history")
+async def get_history():
+    p = Portfolio.load()
+    return JSONResponse(content=[t.model_dump() for t in reversed(p.trade_history)])
