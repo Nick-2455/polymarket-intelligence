@@ -638,9 +638,19 @@ BACKTEST_HTML = """\
 """ + _navbar("backtest") + """
 <div class="page">
   <div class="page-header">
-    <div class="page-title">Backtest Report</div>
-    <div class="page-subtitle" id="subtitle">Run <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:12px">python -m backtester.run</code> to generate a report</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div class="page-title">Backtest Report</div>
+        <div class="page-subtitle" id="subtitle">Validate signal performance against resolved markets</div>
+      </div>
+      <button id="run-btn" onclick="runBacktest()" style="
+        background:var(--accent);color:#fff;border:none;border-radius:8px;
+        padding:10px 20px;font-size:13px;font-weight:600;font-family:'Inter',sans-serif;
+        cursor:pointer;transition:background 0.15s;white-space:nowrap
+      ">Run Backtest</button>
+    </div>
   </div>
+  <div id="run-status" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:20px;font-size:13px;color:var(--muted)"></div>
 
   <div id="warning" style="display:none;background:rgba(245,166,35,0.08);border:1px solid rgba(245,166,35,0.25);border-radius:var(--radius);padding:14px 18px;margin-bottom:20px;color:var(--yellow);font-size:13px">
     ⚠ Insufficient data — need at least 10 resolved signals for statistical conclusions
@@ -680,6 +690,34 @@ function badgeSignal(s) {
   const map = { STRONG_BUY: ['badge-buy','Strong Buy'], STRONG_SELL: ['badge-sell','Strong Sell'] };
   const [cls, label] = map[s] || ['badge-ignore', s];
   return `<span class="badge ${cls}">${label}</span>`;
+}
+
+async function runBacktest() {
+  const btn = document.getElementById('run-btn');
+  const status = document.getElementById('run-status');
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+  btn.style.background = 'var(--surface2)';
+  status.style.display = 'block';
+  status.textContent = '⏳ Running backtest — querying Polymarket for resolved markets…';
+  try {
+    const resp = await fetch('/api/backtest/run', { method: 'POST' });
+    const data = await resp.json();
+    if (resp.ok) {
+      status.style.color = 'var(--green)';
+      status.textContent = '✓ ' + (data.message || 'Backtest complete');
+      await loadReport();
+    } else {
+      status.style.color = 'var(--red)';
+      status.textContent = '✗ ' + (data.error || 'Backtest failed');
+    }
+  } catch(e) {
+    status.style.color = 'var(--red)';
+    status.textContent = '✗ Network error: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Run Backtest';
+  btn.style.background = 'var(--accent)';
 }
 
 async function loadReport() {
@@ -797,6 +835,25 @@ async def health():
         "last_scan": last_scan,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.post("/api/backtest/run")
+async def run_backtest_endpoint():
+    from backtester.run import run_backtest
+    try:
+        report = await run_backtest()
+        if report is None:
+            return JSONResponse(
+                content={"error": "No actionable signals found in log"},
+                status_code=400,
+            )
+        s = report["summary"]
+        return JSONResponse(content={
+            "message": f"Done — {s['resolved']} resolved signals, win rate {s['win_rate']}%",
+            "summary": s,
+        })
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 @router.get("/api/backtest")
