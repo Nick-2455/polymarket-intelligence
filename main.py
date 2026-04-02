@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from scanner.client import PolymarketClient
-from scanner.edge import filter_by_edge
+from scanner.edge import filter_by_edge, filter_by_volume, filter_by_expiration
 from agents.simulator import simulate
 from storage.logger import SignalLogger
 from paper_trading.portfolio import Portfolio
@@ -53,6 +53,8 @@ async def run_scan():
         return
 
     filtered = filter_by_edge(markets, threshold=EDGE_THRESHOLD)
+    filtered = filter_by_volume(filtered)
+    filtered = filter_by_expiration(filtered)
     filtered.sort(key=lambda m: m.volume, reverse=True)
     top_markets = filtered[:MAX_MARKETS]
 
