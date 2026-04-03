@@ -14,8 +14,8 @@ from datetime import datetime, timezone, timedelta
 
 from .client import Market
 
-MIN_VOLUME = 2_000_000.0
-MIN_DAYS_TO_EXPIRY = 30
+MIN_VOLUME = 500_000.0
+MIN_DAYS_TO_EXPIRY = 7
 
 
 def calculate_edge(market: Market) -> float:
