@@ -272,7 +272,13 @@ _NAVBAR = """
     <a class="nav-tab {backtest_active}" href="/backtest">Backtest</a>
     <a class="nav-tab {guide_active}" href="/guide">Guide</a>
   </div>
-  <div class="navbar-right" id="clock"></div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <button id="scanner-toggle" onclick="toggleScanner()"
+      style="padding:5px 14px;border-radius:8px;font-size:12px;font-weight:600;border:none;cursor:pointer;transition:all 0.2s;">
+      ...
+    </button>
+    <div class="navbar-right" id="clock"></div>
+  </div>
 </nav>
 <script>
 (function() {
@@ -282,6 +288,34 @@ _NAVBAR = """
   }
   tick();
   setInterval(tick, 1000);
+
+  async function refreshScannerState() {
+    try {
+      const r = await fetch('/api/scanner/status');
+      const d = await r.json();
+      const btn = document.getElementById('scanner-toggle');
+      if (!btn) return;
+      if (d.paused) {
+        btn.textContent = '▶ Resume Scanner';
+        btn.style.background = '#00c896';
+        btn.style.color = '#0f1117';
+      } else {
+        btn.textContent = '⏸ Pause Scanner';
+        btn.style.background = '#ff4d6d';
+        btn.style.color = '#fff';
+      }
+    } catch(e) {}
+  }
+  refreshScannerState();
+
+  window.toggleScanner = async function() {
+    const btn = document.getElementById('scanner-toggle');
+    const r = await fetch('/api/scanner/status');
+    const d = await r.json();
+    const endpoint = d.paused ? '/api/scanner/resume' : '/api/scanner/pause';
+    await fetch(endpoint, { method: 'POST' });
+    refreshScannerState();
+  };
 })();
 </script>
 """
@@ -1056,6 +1090,26 @@ GUIDE_HTML = """\
 @router.get("/", response_class=HTMLResponse)
 async def dashboard():
     return DASHBOARD_HTML
+
+
+@router.get("/api/scanner/status")
+async def scanner_status():
+    import state as app_state
+    return JSONResponse(content={"paused": app_state.scanner_paused})
+
+
+@router.post("/api/scanner/pause")
+async def scanner_pause():
+    import state as app_state
+    app_state.scanner_paused = True
+    return JSONResponse(content={"paused": True})
+
+
+@router.post("/api/scanner/resume")
+async def scanner_resume():
+    import state as app_state
+    app_state.scanner_paused = False
+    return JSONResponse(content={"paused": False})
 
 
 @router.get("/api/signals")

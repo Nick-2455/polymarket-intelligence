@@ -18,6 +18,7 @@ from paper_trading.portfolio import Portfolio
 from paper_trading.executor import execute_signals
 from paper_trading.tracker import check_open_positions
 from dashboard.routes import router
+import state as app_state
 
 load_dotenv()
 
@@ -41,6 +42,10 @@ def _print_result(result):
 
 
 async def run_scan():
+    if app_state.scanner_paused:
+        print("  [PAUSED] Scanner is paused — skipping scan.")
+        return
+
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n{'='*50}")
     print(f"=== POLYMARKET SCAN [{now}] ===")
